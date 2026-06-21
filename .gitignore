@@ -1,0 +1,21 @@
+# secrets & local state
+.env
+state.json
+command.json
+
+# data (your own logs — not for the repo)
+*.csv
+*.bcd-bak
+capabilities.yaml
+poller.out
+logger.out
+
+# python / uv
+.venv/
+__pycache__/
+*.pyc
+
+
+# Enedis tools: session profile + your exports (sensitive)
+.enedis_export_profile/
+conso_enedis.xlsx

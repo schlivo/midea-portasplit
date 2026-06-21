@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Pilotage local du Midea Portasplit — pas de cloud requis.
+# Usage:
+#   ./clim                      -> état actuel (query)
+#   ./clim caps                 -> capacités du modèle
+#   ./clim on | off             -> allumer / éteindre
+#   ./clim cool 22              -> mode froid, consigne 22°C
+#   ./clim heat 21              -> mode chaud, consigne 21°C
+#   ./clim dry | fan | auto     -> mode déshu / ventilo / auto
+#   ./clim fan high|low|silent|max|auto
+#   ./clim eco on|off | turbo on|off | sleep on|off | display on|off | beep on|off
+#   ./clim set <k=v> [k=v ...]  -> contrôle brut (ex: ./clim set mode=COOL target_temperature=23 fan_speed=AUTO)
+set -euo pipefail
+cd "$(dirname "$0")"
+
+# identifiants depuis .env (jamais en dur)
+set -a; [ -f .env ] && . ./.env; set +a
+HOST="$MIDEA_HOST"
+ID="$MIDEA_DEVICE_ID"
+TOKEN="$MIDEA_TOKEN"
+KEY="$MIDEA_KEY"
+M=(uv run msmart-ng)
+AUTH=(--id "$ID" --token "$TOKEN" --key "$KEY")
+
+q()  { "${M[@]}" query    "${AUTH[@]}" "$HOST"; }
+c()  { "${M[@]}" control  "${AUTH[@]}" "$HOST" "$@"; }
+
+cmd="${1:-status}"; shift || true
+case "$cmd" in
+  status|"")  q ;;
+  energy|conso) "${M[@]}" query --energy "${AUTH[@]}" "$HOST" 2>&1 | grep "Device state" | sed 's/.*Device state: //' | tr ',' '\n' | grep -iE "energy|power|usage" ;;
+  caps)       "${M[@]}" query --capabilities "${AUTH[@]}" "$HOST" ;;
+  on)         c power=True ;;
+  off)        c power=False ;;
+  cool)       c power=True mode=COOL ${1:+target_temperature=$1} ;;
+  heat)       c power=True mode=HEAT ${1:+target_temperature=$1} ;;
+  dry)        c power=True mode=DRY ;;
+  fan)        if [ $# -gt 0 ]; then c fan_speed=$(echo "$1"|tr a-z A-Z); else c power=True mode=FAN_ONLY; fi ;;
+  auto)       c power=True mode=AUTO ;;
+  temp)       c target_temperature="$1" ;;
+  eco|turbo|sleep|display|beep)
+              v=$(echo "${1:-on}"|sed 's/on/True/;s/off/False/')
+              case "$cmd" in display) k=display_on;; *) k=$cmd;; esac
+              c "$k=$v" ;;
+  set)        c "$@" ;;
+  *)          echo "Commande inconnue: $cmd"; sed -n '2,18p' "$0"; exit 1 ;;
+esac
