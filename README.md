@@ -59,6 +59,7 @@ distilled into [`FINDINGS.md`](FINDINGS.md), and the *method* into
 | `poller.py` | **single-owner daemon**: poll · log · cache · regulate |
 | `thermostat.py` | cache consumer; queues commands |
 | `watchdog.py` | condenser heat-spot / recirculation check |
+| `advisor.py` | heat-wave ventilation advisor: per-room open/close vs weather + forecast, `--watch` for desktop alerts |
 | `netatmo_auth.py` | one-time Netatmo OAuth helper |
 | `clim` | quick shell wrapper |
 | `enedis.py` / `enedis_export.py` / `conso.py` | *optional* — read your electricity-meter data (see below) |
