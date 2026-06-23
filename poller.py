@@ -31,6 +31,7 @@ import netatmo
 import weather
 
 CSV_PATH = Path(__file__).with_name("climate_log.csv")
+ROOMS_CSV = Path(__file__).with_name("rooms_log.csv")  # toutes les pièces (format long)
 FIELDS = ["timestamp", "netatmo_temp", "midea_temp", "outdoor_temp",
           "ac_power", "ac_mode", "ac_setpoint", "power_w", "energy_kwh",
           "netatmo_setpoint", "netatmo_mode", "heating",
@@ -78,12 +79,27 @@ async def cycle(dev, args) -> None:
     await dev.refresh()
     st = aclib.snapshot(dev)
     # Netatmo (cloud) résilient : une panne ne doit JAMAIS empêcher de logger la Midea.
+    # On lit TOUTES les pièces (read_all) -> chambre cible + log par pièce.
     try:
-        nt = await asyncio.to_thread(netatmo.read)
+        rooms_all = await asyncio.to_thread(netatmo.read_all)
     except Exception as e:
-        nt = netatmo.Therm()
+        rooms_all = []
         print(f"  [netatmo indispo: {e}]", flush=True)
+    nt = next((r for r in rooms_all
+               if (r.room_name or "").strip().lower() == netatmo.TARGET_ROOM.lower()),
+              None) or netatmo.Therm()
     now = datetime.now(timezone.utc)
+
+    # log toutes les pièces (format long: une ligne par pièce et par cycle)
+    if rooms_all:
+        new = not ROOMS_CSV.exists()
+        with ROOMS_CSV.open("a", newline="") as f:
+            w = csv.writer(f)
+            if new:
+                w.writerow(["timestamp", "room", "temp", "setpoint", "mode"])
+            ts = now.isoformat(timespec="seconds")
+            for r in rooms_all:
+                w.writerow([ts, r.room_name, r.measured_temp, r.setpoint_temp, r.setpoint_mode])
 
     # météo ambiante (résiliente : ne casse pas le cycle si Open-Meteo échoue)
     ambient_temp = heat_delta = None
@@ -150,15 +166,16 @@ async def main() -> None:
         print(f"# Poller + régulation cible {args.target}°C "
               f"({'APPLY' if args.apply else 'DRY-RUN'})", flush=True)
 
-    dev = None
     while True:
         try:
-            if dev is None:
-                dev = await aclib.connect()
+            # Connexion FRAÎCHE à chaque cycle : sur un objet persistant, msmart
+            # rafraîchit la puissance mais PAS les sondes de température (elles
+            # gèlent sur une connexion longue/stable). Reconnecter (~1-2s) garantit
+            # des températures à jour. Découvert le 2026-06-23 (condenseur figé 11h).
+            dev = await aclib.connect()
             await cycle(dev, args)
         except Exception as e:
             print(f"[warn] cycle: {e}", file=sys.stderr, flush=True)
-            dev = None  # forcer une reconnexion au prochain tour
         if args.once:
             break
         time.sleep(args.interval)

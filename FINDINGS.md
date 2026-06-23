@@ -18,6 +18,18 @@ the official app showed **1036 W** while our BCD read said ~290 W.
 - **Lesson:** always sanity-check telemetry against the vendor app. A
   suspiciously-low number probably means a decode/format bug.
 
+### Temperatures freeze on a long-lived connection (poll fresh each cycle)
+On a **reused** msmart device object, `refresh()` keeps updating `power_w` but the
+**temperature** fields (`outdoor_temp`, `indoor_temp`) silently stop updating —
+they hold a stale value indefinitely on a stable connection. Cause: `refresh()`
+fires *separate* commands (`GetStateCommand` for temps, `GetEnergyUsageCommand`
+for power) and only updates a field when its response actually arrives/parses; on
+a long-lived pipelined socket the state response goes stale/mis-paired while the
+energy one keeps landing. A **fresh connection** reads correct temps. We saw the
+condenser stuck at 33.5°C for an entire 11h night while it was really ~30°C.
+Fix: **reconnect (`connect()`) every poll cycle** (auth is ~1-2s) — see
+`poller.py`. (It hid during the day because connection errors forced reconnects.)
+
 ### `power_state` is unreliable
 Reads `False` while the compressor is clearly running (100 W+). **Trust
 `power_w`** as ground truth (standby ≈ 2 W, cooling 100–1000 W). All "is it on /

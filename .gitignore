@@ -19,3 +19,6 @@ __pycache__/
 # Enedis tools: session profile + your exports (sensitive)
 .enedis_export_profile/
 conso_enedis.xlsx
+
+# generated graphs
+*.png
